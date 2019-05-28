@@ -1,7 +1,7 @@
-import React from "react";
-import ReactDOM from "react-dom";
-import { Machine, assign } from "xstate";
-import { useMachine } from "@xstate/react";
+import React from "react"
+import ReactDOM from "react-dom"
+import { Machine, assign } from "xstate"
+import { useMachine } from "@xstate/react"
 
 const todoMachine = Machine(
   {
@@ -14,24 +14,20 @@ const todoMachine = Machine(
       pending: {
         invoke: {
           src: "getData",
-          onDone: {
-            target: "success",
-            actions: "actionGetData"
-          },
-          onError: {
-            target: "failure",
-            actions: "actionGetData"
-          }
+          onDone: "success",
+          onError: "failure"
         }
       },
       success: {
+        onEntry: "actionGetData",
         on: {
-          TOGGLEDONE: {
+          "TASK.CLICK": {
             actions: "actionToggleDone"
           }
         }
       },
       failure: {
+        onEntry: "actionGetData",
         on: {
           RETRY: "pending"
         }
@@ -44,20 +40,21 @@ const todoMachine = Machine(
         tasks: (_ctx, event) => event.data
       }),
       actionToggleDone: assign({
-        tasks: (ctx, data) => {
-          ctx.tasks[data.index].done = !ctx.tasks[data.index].done;
-
-          return ctx.tasks;
-        }
+        tasks: (ctx, event) =>
+          ctx.tasks.map((task, index) =>
+            index === event.index ? { ...task, done: !task.done } : task
+          )
       })
     },
     services: {
       getData: ctx =>
         new Promise((res, rej) =>
           setTimeout(() => {
-            const random = Math.floor(Math.random() * 10);
+            const random = Math.floor(Math.random() * 10)
 
-            if (random >= 7) rej([]);
+            if (random >= 7) {
+              rej([])
+            }
             res([
               {
                 done: true,
@@ -75,75 +72,52 @@ const todoMachine = Machine(
                 done: false,
                 taskTitle: "Have a life!!"
               }
-            ]);
+            ])
           }, 3000)
         )
     }
   }
-);
+)
 
-const showError = machine => {
-  const [current, send] = machine;
-  if (current.value !== "failure") return;
-  return (
-    <div>
-      Erro! <button onClick={e => send({ type: "RETRY", e: e })}>Retry!</button>
-    </div>
-  );
-};
+const RetryButton = ({ onRetryClick }) => (
+  <div>
+    Erro! <button onClick={() => onRetryClick()}>Retry!</button>
+  </div>
+)
 
-const showLoading = machine => {
-  const [current] = machine;
-  if (current.value !== "pending") return;
-  return <div>Loading...</div>;
-};
-
-const showData = machine => {
-  const [current, send] = machine;
-  const { tasks } = current.context;
-
-  if (current.value !== "success") return;
-  return (
-    <ul>
-      {tasks.map((task, index) => {
-        if (task.done === true)
-          return (
-            <li key={index}>
-              <strike>{task.taskTitle}</strike>{" "}
-              <button onClick={() => send({ type: "TOGGLEDONE", index })}>
-                Undo
-              </button>
-            </li>
-          );
-        return (
-          <li key={index}>
-            {task.taskTitle}{" "}
-            <button onClick={() => send({ type: "TOGGLEDONE", index })}>
-              Done
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
-};
+const TaskList = ({ tasks, onTaskClick }) => (
+  <ul>
+    {tasks.map((task, index) => (
+      <li key={index}>
+        {task.done ? <strike>{task.taskTitle}</strike> : task.taskTitle}{" "}
+        <button onClick={() => onTaskClick(index)}>Done</button>
+      </li>
+    ))}
+  </ul>
+)
 
 function App() {
-  const machine = useMachine(todoMachine);
-  const [current] = machine;
-  console.info("state => ", current.value);
-  console.info("context => ", current.context);
-  console.info("actions => ", current.actions);
-  console.log("-------");
+  const [state, send] = useMachine(todoMachine)
+
+  console.info("state => ", state.value)
+  console.info("context => ", state.context)
+  console.info("actions => ", state.actions)
+  console.log("-------")
 
   return (
     <div className="App">
-      {showLoading(machine)}
-      {showError(machine)}
-      {showData(machine)}
+      {(state.matches("pending") && "Loading...") ||
+        (state.matches("failure") && (
+          <RetryButton onRetryClick={() => send("RETRY")} />
+        )) || (
+          <TaskList
+            tasks={state.context.tasks}
+            onTaskClick={index => send("TASK.CLICK", { index })}
+          />
+        )}
     </div>
-  );
+  )
 }
 
-const rootElement = document.getElementById("root");
-ReactDOM.render(<App />, rootElement);
+const rootElement = document.getElementById("root")
+ReactDOM.render(<App />, rootElement)
